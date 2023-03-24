@@ -5,9 +5,9 @@ account: lubarcenter
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 8657088
-bundleId: 6999732
+bundleId: 7004764
 url: https://lubarcenter.shinyapps.io/MapAssembly/
-when: 1679604150.94162
-lastSyncTime: 1679604150.94163
+when: 1679690472.44399
+lastSyncTime: 1679690472.444
 asMultiple: FALSE
 asStatic: FALSE

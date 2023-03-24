@@ -12,6 +12,13 @@ margins.2022 <- orig %>%
   select(office, district, margin) %>%
   pivot_wider(names_from = office, values_from = margin)
 
+# two-party vote total in 2022 Assembly Districts
+vote.total.2022 <- orig %>%
+  filter(plan == "2022") %>%
+  mutate(party2_tot = DEM + REP) %>%
+  select(office, district, party2_tot) %>%
+  pivot_wider(names_from = office, values_from = party2_tot)
+
 # assembly seats contested by both parties in 2022
 contested.assembly.22 <- orig %>%
   filter(plan == "2022",
@@ -23,29 +30,33 @@ contested.assembly.22 <- orig %>%
 margins.contested <- margins.2022 %>%
   filter(district %in% contested.assembly.22$district)
 
+# just the vote totals for contested assembly districts
+vote.totals.contested <- vote.total.2022 %>%
+  filter(district %in% contested.assembly.22$district)
+
 
 # Two-step modelling process
 #   Use the "v1" model to predict Assembly winner
 #   Use the "v2" model to predict Assembly margin using interaction term with predicted winner from "v1"
-lm.wsa.v1 <- lm(WSA ~ GOV + USS + WAG + WST, data = margins.contested)
+lm.margin.v1 <- lm(WSA ~ GOV + USS + WAG + WST, data = margins.contested)
 
 margins.contested.v2 <- margins.contested %>%
-  mutate(predicted_margin_v1 = predict.lm(lm.wsa.v1, newdata = .[]),
+  mutate(predicted_margin_v1 = predict.lm(lm.margin.v1, newdata = .[]),
          predicted_dem_win = if_else(predicted_margin_v1 > 0, 1, 0))
 
-lm.wsa.v2 <- lm(WSA ~ predicted_dem_win + GOV*predicted_dem_win +
-                  USS*predicted_dem_win + WAG*predicted_dem_win +
-                  WST*predicted_dem_win, data = margins.contested.v2)
+lm.margin.v2 <- lm(WSA ~ predicted_dem_win + GOV*predicted_dem_win +
+                     USS*predicted_dem_win + WAG*predicted_dem_win +
+                     WST*predicted_dem_win, data = margins.contested.v2)
 
-summary(lm.wsa.v1)
-summary(lm.wsa.v2)
+summary(lm.margin.v1)
+summary(lm.margin.v2)
 
-predicted.wsa <- orig %>%
+predicted.margin <- orig %>%
   select(plan, office, district, margin) %>%
   pivot_wider(names_from = office, values_from = margin) %>%
-  mutate(predict_v1 = predict.lm(lm.wsa.v1, newdata = .[]),
+  mutate(predict_v1 = predict.lm(lm.margin.v1, newdata = .[]),
          predicted_dem_win = if_else(predict_v1 > 0, 1, 0)) %>%
-  mutate(predict_v2 = predict.lm(lm.wsa.v2, newdata = .[])) %>%
+  mutate(predict_v2 = predict.lm(lm.margin.v2, newdata = .[])) %>%
   mutate(predict_avg = (GOV + USS + WAG + WST)/4,
          final_wsa = case_when(
            plan != "2022" ~ predict_v2,
@@ -53,7 +64,7 @@ predicted.wsa <- orig %>%
            TRUE ~ predict_v2
          ))
 
-compare.residuals <- predicted.wsa %>%
+compare.residuals <- predicted.margin %>%
   filter(plan == "2022",
          district %in% contested.assembly.22$district) %>%
   mutate(residuals_v1 = WSA - predict_v1,
@@ -91,5 +102,23 @@ predicted.wsa %>%
   group_by(method, winner_comparison) %>%
   summarise(count = n()) %>%
   pivot_wider(names_from = method, values_from = count, values_fill = 0)
+
+####################################################################
+# model vote totals
+lm.votes.v1 <- lm(WSA ~ GOV + USS + WAG + WST, data = vote.totals.contested)
+vote.totals.contested %>%
+  mutate(predicted = predict(lm.votes.v1),
+         residuals = residuals(lm.votes.v1)) %>%
+  arrange(residuals)
+
+predicted.votes <- orig %>%
+  mutate(party2_tot = DEM + REP) %>%
+  select(plan, office, district, party2_tot) %>%
+  pivot_wider(names_from = office, values_from = party2_tot) %>%
+  mutate(predict_party2tot = predict.lm(lm.votes.v1, newdata = .[])) %>%
+  select(plan, district, predict_party2tot)
+
+predicted.wsa <- inner_join(predicted.margin, predicted.votes)
+
 
 write_csv(predicted.wsa, "model/AssemblyDistricts_with_ModelledVote.csv")

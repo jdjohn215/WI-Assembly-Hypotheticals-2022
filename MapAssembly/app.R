@@ -62,7 +62,7 @@ ui <- fluidPage(
           ),
           sliderInput(
             inputId = "margin_shift",
-            label = "Add a statewide uniform vote swing (positive is more Democratic)",
+            label = "Add a statewide uniform vote swing (percentage point margin where positive is more Democratic)",
             min = -20, max = 20, step = 0.5,
             value = 0
             ),
@@ -72,7 +72,7 @@ ui <- fluidPage(
         # Show a plot of the generated distribution
         mainPanel(
           textOutput("summaryText"),
-          leafletOutput("map", height = 800)
+          leafletOutput("map", height = 600)
         )
     )
 )
@@ -107,6 +107,14 @@ server <- function(input, output) {
                                           Democratic, "Democratic seats."))
   })
   
+  describe.shift <- eventReactive(input$go, {
+    if_else(input$margin_shift != 0,
+            true = paste("and applying a", paste0(abs(input$margin_shift), "-point"),
+                         "shift in favor of the",
+                         if_else(input$margin_shift < 0, "Republicans.", "Democrats.")),
+            false = paste0(". "))
+  })
+  
   
   output$summaryText <- renderText({
     
@@ -128,11 +136,7 @@ server <- function(input, output) {
     
     paste("Showing the", district.description,
           "with party support based on", vote.distro.text,
-          if_else(input$margin_shift != 0,
-                  true = paste("and applying a", paste0(abs(input$margin_shift), "-point"),
-                               "shift in favor of the",
-                               if_else(input$margin_shift < 0, "Republicans.", "Democrats.")),
-                  false = paste0(". ")),
+          describe.shift(),
           "In this scenario, we expect", selected.scenario.totals() %>% pull(scenario_description))
   })
   
@@ -174,7 +178,7 @@ server <- function(input, output) {
   observeEvent(input$go, {
     fillpall <- colorBin(palette = c("#b2182b","#d6604d","#f4a582","#fddbc7",
                                      "#d1e5f0","#92c5de","#4393c3","#2166ac"),
-                         bins = c(-100, -20, -10, -5, 0, 5, 10, 20, 100))
+                         bins = c(-Inf, -20, -10, -5, 0, 5, 10, 20, Inf))
 
     leafletProxy("map", data = map.scenario()) %>%
       clearShapes() %>%
