@@ -88,20 +88,6 @@ compare.residuals %>%
                            aes(label = district), min.segment.length = 0.01) +
   facet_wrap(facets = vars(model))
 
-# compare congruence of win totals
-predicted.wsa %>%
-  filter(plan == "2022") %>%
-  select(district, WSA, starts_with("predict_")) %>%
-  pivot_longer(cols = starts_with("predict"), names_to = "method", values_to = "prediction") %>%
-  mutate(winner_comparison = case_when(
-    WSA < 0 & prediction < 0 ~ "agree, rep won",
-    WSA > 0 & prediction > 0 ~ "agree, dem won",
-    WSA < 0 & prediction > 0 ~ "disagree, rep won",
-    WSA > 0 & prediction < 0 ~ "disagree, dem won"
-  )) %>%
-  group_by(method, winner_comparison) %>%
-  summarise(count = n()) %>%
-  pivot_wider(names_from = method, values_from = count, values_fill = 0)
 
 ####################################################################
 # model vote totals
@@ -118,7 +104,13 @@ predicted.votes <- orig %>%
   mutate(predict_party2tot = predict.lm(lm.votes.v1, newdata = .[])) %>%
   select(plan, district, predict_party2tot)
 
-predicted.wsa <- inner_join(predicted.margin, predicted.votes)
+predicted.wsa <- inner_join(predicted.margin, predicted.votes) %>%
+  mutate(contested_2022 = case_when(
+    plan != "2022" ~ NA_character_,
+    district %in% contested.assembly.22$district ~ "contested",
+    TRUE ~ "uncontested"
+  ))
 
 
 write_csv(predicted.wsa, "model/AssemblyDistricts_with_ModelledVote.csv")
+
