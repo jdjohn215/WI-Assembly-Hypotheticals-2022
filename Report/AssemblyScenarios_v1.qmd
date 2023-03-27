@@ -1,0 +1,267 @@
+---
+title: "The balance of power in Wisconsin's Assembly under alternative maps"
+author: "John D. Johnson"
+date: "March 27, 2023"
+format:
+  html:
+    toc: true
+    toc-location: left
+    self-contained: true
+reference-location: margin
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(gt)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+assembly.all <- read_csv(here::here("model/AssemblyDistricts_with_ModelledVote.csv"))
+seats.by.scenario <- read_csv(here::here("model/AssemblySeats_by_Scenario.csv"))
+allocation.factors <- read_csv(here::here("WI_2022_ReportingUnit_to_District_Allocation_Factors.csv")) %>%
+  group_by(plan) %>%
+  mutate(allocated_votes = total_votes * prop_of_rep_unit) %>%
+  summarise(no_uncertainty = sum(total_votes[prop_of_rep_unit == 1])/sum(total_votes)*100,
+            uncertain_weighted_mean = weighted.mean(prop_of_rep_unit[prop_of_rep_unit < 1],
+                                                    w = allocated_votes[prop_of_rep_unit < 1])*100,
+            overall_weighted_mean = weighted.mean(prop_of_rep_unit, w = allocated_votes)*100) %>%
+  mutate(across(where(is.numeric), round, digits = 1))
+```
+
+# Overview
+
+Last year, Wisconsin's Supreme Court ultimately chose a [new state assembly map drafted by Republican legislators](https://www.wpr.org/wisconsin-supreme-court-chooses-maps-drawn-republicans-new-redistricting-decision). The new map refreshed the [notorious Republican gerrymander](https://www.wpr.org/wpr-reports/mappedout/how-2011-political-district-map-changed-game-wisconsin) drawn a decade prior. In the November 2022 election, Republican Assembly candidates carried 64 of the 99 districts, increasing their share of the chamber by 2 seats.
+
+Democrats won the other 35 seats. A Lubar Center analysis concludes that Democratic candidates most likely would've won 36 seats under the previous decade's boundaries, 39 seats under the "least change" map [proposed by Governor Evers](https://content.govdelivery.com/accounts/WIGOV/bulletins/3010fc2), and 43 seats under the final map submitted by the [People's Map Commission](https://govstatus.egov.com/peoplesmaps/work-records) (PMC).
+
+[I modeled Assembly vote based on the results of the 2022 elections for Governor, US Senate, state Attorney General, and state Treasurer. Each party won two races, and the average of all 4 is a 0.6-point Democratic statewide lean. Despite this, the same model predicts that Republican Assembly candidates would receive 51% of the two-party vote (+2 points) if all districts were contested.]{.aside}
+
+Republican assembly candidates generally outperformed their fellow Republican candidates for statewide office. While Assembly Democrats won 35 seats under the current map, Democratic Governor Tony Evers carried the vote in 39 seats. I calculate that Evers also won the vote in 45 of the previous decade's districts, 47 of the seats proposed in Evers least change plan, and 53 of the seats drawn by the PMC.
+
+Much has been written ([including by me](https://law.marquette.edu/facultyblog/2021/02/why-do-republicans-overperform-in-the-wisconsin-state-assembly-partisan-gerrymandering-vs-political-geography/)) about how Wisconsin's political geography disfavors Democrats at the legislative level. Evers' strong performance in the hypothetical districts drawn by the PMC is a demonstration of how this need not necessarily be the case. The PMC map would've translated Evers' 51.7% of the statewide vote into victories in 53.5% of the Assembly.
+
+As the table below shows, the PMC map would've been particularly responsive to political changes across the state. It's helpful to compare the seats won by Ron Johnson (R) with Tony Evers (D) across the plans. Evers won the state by 3.4 points, and Johnson won it by 1 point.
+
+Under the current districts, Johnson's victory would've resulted in a 35D/64R Assembly, and Evers victory would've achieved an only slightly different 39D/60R split.
+
+The past decade's map was a bit more responsive. Johnson's 1-pt statewide victory would've caused a 37D/62R Assembly and Evers' 3.4-pt victory a 45D/54R outcome.
+
+Under Evers' proposed least change districts, Johnson would've carried 60 seats. Evers would've won 47.
+
+The People's Map Commission districts are the most responsive of this set to changes in the electorate. This map would've translated Johnson's 1-pt victory into a 44D/55R chamber. And Evers' 3.4-point victory would've been good for a Democratic majority in 53 seats.
+
+Again, recall that Democratic Assembly candidates tended to be less popular than Gov. Evers. Our model expects that Republican Assembly candidates would have still handily carried a majority of the Assembly even in the PMC districts. The key difference is that a significant number of seats would be genuinely competitive in this map. The kinds of small changes in partisan support which Wisconsin experiences from one election to the next would likely be genuinely consequential to the balance of power in the state legislature.
+
+```{r}
+seats.by.scenario %>%
+  group_by(plan, baseline) %>%
+  summarise(`seats won by Dems` = dem[swing == 0],
+            `swing needed for GOP supermajority` = max(swing[rep == 66]),
+            `swing needed for Dem majority` = min(swing[dem == 50]),
+            .groups = "drop") %>%
+  pivot_longer(cols = -c(plan, baseline)) %>%
+  pivot_wider(names_from = baseline, values_from = value) %>%
+  mutate(plan = case_when(
+    plan == "2012" ~ "Districts used from 2012-20",
+    plan == "2022" ~ "Districts established in 2022",
+    TRUE ~ plan
+  ),
+  plan = factor(plan, levels = c("Districts established in 2022",
+                                 "Districts used from 2012-20",
+                                 "Evers least change",
+                                 "People's Map Commission"))) %>%
+  arrange(plan) %>%
+  group_by(plan) %>%
+  gt(rowname_col = "name") %>%
+  cols_label(
+    final_wsa = "modelled vote",
+    GOV = "2022 Gov.",
+    USS = "2022 Senator"
+  ) %>%
+  tab_spanner(columns = c("final_wsa", "GOV", "USS"),
+              label = "Distribution of votes based on") %>%
+  tab_style(
+    style = cell_text(align = "right", indent = px(10), style = "italic"),
+    locations = cells_stub()
+  ) %>%
+  tab_stubhead("Assembly District Map") %>%
+  tab_header(title = "Partisan implications of selected real and hypothetical WI Assembly Maps",
+             subtitle = "Based on the results of the November 2022 general election") %>%
+  tab_style(style = cell_text(weight = "bold"),
+            locations = list(cells_row_groups(), cells_column_spanners(),
+                             cells_stubhead())) %>%
+  tab_style(style = cell_text(weight = "bold", size = "x-large"),
+            locations = list(cells_title("title"))) %>%
+  tab_style(style = cell_text(weight = "bold", size = "large"),
+            locations = list(cells_title("subtitle"))) %>%
+  fmt_number(columns = 3:5, rows = str_detect(name, "seats"),
+             decimals = 0, pattern = "{x} seats") %>%
+  fmt_number(columns = 3:5, rows = str_detect(name, "swing"),
+             decimals = 1, pattern = "{x} pts") %>%
+  tab_options(table.width = 700) %>%
+  tab_footnote("Based on a linear model incorporating the results of the elections for governor, U.S. senate, attorney general, and state treasurer.",
+               locations = cells_column_labels("final_wsa")) %>%
+  tab_footnote("Tony Evers (D) defeated Tim Michels (R) by 3.4 points. This column shows the Assembly seats where Evers carried a majority of the vote.",
+               locations = cells_column_labels("GOV")) %>%
+  tab_footnote("Ron Johnson (R) defeated Mandela Barnes (D) by 1.0 points. This column shows the Assembly seats where Johnson carried a majority of the vote.",
+               locations = cells_column_labels("USS")) %>%
+  tab_footnote("Since these are the actual districts used, I use the real Assembly results for the 73 races which drew candidates from both parties, and I substitute the modelled vote for the 26 uncontested seats.",
+               locations = cells_body(columns = "final_wsa", rows = 1))
+```
+
+# Explore
+
+Use the web application below to explore hypothetical Assembly election scenarios. You can choose between 4 different district plans and several different vote baselines. Use the slider bar to apply a uniform statewide swing in favor of either party to your selected map and vote distribution.
+
+:::{.column-page}
+```{=html}
+<iframe width="100%" height="800" src="https://lubarcenter.shinyapps.io/MapAssembly/" title="Assembly Application" data-external="1"></iframe>
+```
+:::
+
+# Methodology
+
+The source data and code for this analysis is available in [this Github repository](https://github.com/jdjohn215/WI-Assembly-Hypotheticals-2022).
+
+## aggregation of votes
+
+To aggregate election results from 2022 into alternative district maps, I created allocation factors between the smallest geography in 2022 with each alternative district scheme.
+
+Election results in Wisconsin are tabulated in "reporting units," which are either individual wards or combinations of wards with identical races on the ballot. I combined ward polygons into reporting unit polygons, which are [available to download here](https://github.com/jdjohn215/wi-nov-2022). I then used geocoded address coordinates from the Wisconsin voter file to identify the proportion of voters from each reporting unit who lived in each overlapping hypothetical Assembly district. 
+
+[[Download a CSV file with the allocation factors between each November 2022 reporting unit and the alternative Assembly districts here](https://github.com/jdjohn215/WI-Assembly-Hypotheticals-2022/blob/main/WI_2022_ReportingUnit_to_District_Allocation_Factors.csv).]{.aside}
+
+Most reporting units could be allocated to alternative districts with little uncertainty. The average voter was allocated to a district with 98.0% certainty in the previous decade's districts, 97.0% certainty in the People's Map Commission plan, and 96.6% in the Evers' Least Change submission.
+
+## modeling Assembly vote
+
+We can't estimate Assembly outcomes in alternative districts by simply adding up the reallocated vote for actual Democratic and Republican assembly candidates because many districts feature uncontested races. Instead, I used the 73 contested Assembly elections to create a model that predicts Assembly vote based on the vote for Governor, Senate, Treasurer, and Attorney General. I don't include incumbency as an independent variable, because incumbency would vary in unpredictable ways under alternative districts.
+
+The modeling process involves two steps. First, I estimate the vote margin using a simple linear model as follows, where WSA, GOV, USS, WAG, and WST are the vote margins for Assembly, Governor, Senator, Attorney General, and Treasurer, respectively.
+
+$$
+\operatorname{WSA} = \alpha + \beta_{1}(\operatorname{GOV}) + \beta_{2}(\operatorname{USS}) + \beta_{3}(\operatorname{WAG}) + \beta_{4}(\operatorname{WST}) + \epsilon
+$$
+
+[See this subdirectory for the code and results of these models.](https://github.com/jdjohn215/WI-Assembly-Hypotheticals-2022/tree/main/model)
+
+I use the predicted vote margin in the first model to create a dummy variable `predicted_dem_win`, with a value of 1 for a Democratic victory and a value of 0 for a Republican victory. The final version of the model includes an interaction term with this dummy variable, as shown below.
+
+$$
+\displaylines{\operatorname{WSA} = \alpha + \beta_{1}(\operatorname{predicted\_dem\_win}) + \beta_{2}(\operatorname{GOV}) + \beta_{3}(\operatorname{USS}) + \beta_{4}(\operatorname{WAG}) +\\ \beta_{5}(\operatorname{WST}) + \beta_{6}(\operatorname{predicted\_dem\_win} \times \operatorname{GOV}) + \beta_{7}(\operatorname{predicted\_dem\_win} \times \operatorname{USS}) +\\ \beta_{8}(\operatorname{predicted\_dem\_win} \times \operatorname{WAG}) + \beta_{9}(\operatorname{predicted\_dem\_win} \times \operatorname{WST}) + \epsilon}
+$$
+
+Here are the results of each model.
+
+::: {.panel-tabset}
+
+### model v1
+```{=html}
+<table style="text-align:center"><tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"></td><td><em>Dependent variable:</em></td></tr>
+<tr><td></td><td colspan="1" style="border-bottom: 1px solid black"></td></tr>
+<tr><td style="text-align:left"></td><td>WSA</td></tr>
+<tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">GOV</td><td>-0.939<sup>*</sup></td></tr>
+<tr><td style="text-align:left"></td><td>(0.472)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">USS</td><td>1.839<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td>(0.469)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">WAG</td><td>0.472</td></tr>
+<tr><td style="text-align:left"></td><td>(0.349)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">WST</td><td>-0.335</td></tr>
+<tr><td style="text-align:left"></td><td>(0.474)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">Constant</td><td>2.272</td></tr>
+<tr><td style="text-align:left"></td><td>(2.229)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Observations</td><td>73</td></tr>
+<tr><td style="text-align:left">R<sup>2</sup></td><td>0.982</td></tr>
+<tr><td style="text-align:left">Adjusted R<sup>2</sup></td><td>0.981</td></tr>
+<tr><td style="text-align:left">Residual Std. Error</td><td>3.842 (df = 68)</td></tr>
+<tr><td style="text-align:left">F Statistic</td><td>943.252<sup>***</sup> (df = 4; 68)</td></tr>
+<tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"><em>Note:</em></td><td style="text-align:right"><sup>*</sup>p<0.1; <sup>**</sup>p<0.05; <sup>***</sup>p<0.01</td></tr>
+</table>
+```
+
+### model v2
+```{=html}
+<table style="text-align:center"><tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"></td><td><em>Dependent variable:</em></td></tr>
+<tr><td></td><td colspan="1" style="border-bottom: 1px solid black"></td></tr>
+<tr><td style="text-align:left"></td><td>WSA</td></tr>
+<tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">predicted_dem_win</td><td>-1.172</td></tr>
+<tr><td style="text-align:left"></td><td>(5.852)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">GOV</td><td>-1.545<sup>**</sup></td></tr>
+<tr><td style="text-align:left"></td><td>(0.707)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">USS</td><td>2.254<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td>(0.586)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">WAG</td><td>0.588</td></tr>
+<tr><td style="text-align:left"></td><td>(0.388)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">WST</td><td>-0.323</td></tr>
+<tr><td style="text-align:left"></td><td>(0.509)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">predicted_dem_win:GOV</td><td>1.491</td></tr>
+<tr><td style="text-align:left"></td><td>(1.005)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">predicted_dem_win:USS</td><td>-1.887</td></tr>
+<tr><td style="text-align:left"></td><td>(1.352)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">predicted_dem_win:WAG</td><td>-0.177</td></tr>
+<tr><td style="text-align:left"></td><td>(0.763)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">predicted_dem_win:WST</td><td>0.578</td></tr>
+<tr><td style="text-align:left"></td><td>(1.080)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td style="text-align:left">Constant</td><td>3.217</td></tr>
+<tr><td style="text-align:left"></td><td>(3.855)</td></tr>
+<tr><td style="text-align:left"></td><td></td></tr>
+<tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Observations</td><td>73</td></tr>
+<tr><td style="text-align:left">R<sup>2</sup></td><td>0.986</td></tr>
+<tr><td style="text-align:left">Adjusted R<sup>2</sup></td><td>0.984</td></tr>
+<tr><td style="text-align:left">Residual Std. Error</td><td>3.541 (df = 63)</td></tr>
+<tr><td style="text-align:left">F Statistic</td><td>495.494<sup>***</sup> (df = 9; 63)</td></tr>
+<tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"><em>Note:</em></td><td style="text-align:right"><sup>*</sup>p<0.1; <sup>**</sup>p<0.05; <sup>***</sup>p<0.01</td></tr>
+</table>
+```
+
+:::
+
+The graphs below show the residuals (the difference between real and predicted value) for each of the 73 contested Assembly races. The left graph merely shows the difference between the average of the 4 statewide races and the outcome in that state assembly race. Notice how Republican assembly candidates in Republican-leaning districts tended to outperform statewide GOP candidates.
+
+The middle graph shows the residuals of the first linear model. Note the obvious downward trend in the residuals for Democratic-leaning seats. The right graph shows the residuals of the second model, which includes the interaction term for election outcome. The residuals here follow a much more random distribution.
+
+The 6th district is a consistent outlier. The GOP candidate, Peter Schmidt, underperformed other Republicans, after [becoming embroiled](https://www.greenbaypressgazette.com/story/news/2022/08/25/shawano-county-gop-censures-wisconsin-assembly-candidate-over-criminal-charge/7895801001/) in multiple scandals and being censured by his local party.
+
+My final model predicts the correct winner in all but two races. They are the 94th district (suburban La Crosse) and the 84th district (suburban Milwaukee). My model predicted a Republican winner in the 94th, but incumbent Democrat Steve Doyle hung on for a narrow victory. In the open 84th district, my model expected a narrow Democratic victory, but former Milwaukee alderman Bob Donovan won a slim majority instead.
+
+```{r}
+#| column: page
+#| fig-align: center
+#| fig-width: 12
+assembly.all %>%
+  filter(contested_2022 == "contested") %>%
+  select(plan, district, WSA, predict_avg, predict_v1, predict_v2) %>%
+  pivot_longer(cols = starts_with("predict"), names_to = "method", values_to = "predicted") %>%
+  mutate(residuals = WSA - predicted,
+         method = case_when(
+           method == "predict_avg" ~ "simple average of 4 races",
+           method == "predict_v1" ~ "model, v1",
+           method == "predict_v2" ~ "model, v2"
+         ),
+         method = factor(method, levels = c("simple average of 4 races",
+                                            "model, v1",
+                                            "model, v2"))) %>%
+  ggplot(aes(WSA, residuals)) +
+  geom_point(alpha = 0.75) +
+  ggrepel::geom_text_repel(data = function(x){filter(x, abs(residuals) > 6)},
+                           aes(label = district), min.segment.length = 0.1) +
+  labs(x = "actual result (Democratic vote margin)",
+       y = "residuals (real - predicted)",
+       title = "Comparison of actual Assembly vote with residuals from 3 prediction methods") +
+  facet_wrap(facets = vars(method))
+```
+
+
